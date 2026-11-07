@@ -1,5 +1,6 @@
-# Keep new competition scripts readable by Linux Bash after Windows checkout.
 /.gitattributes text eol=lf
 /.gitignore text eol=lf
-/README.md text eol=lf
-/thuscc26/** text eol=lf
+/*.md text eol=lf
+/HPL.dat text eol=lf
+/Make.Linux_Intel text eol=lf
+/run.sh text eol=lf

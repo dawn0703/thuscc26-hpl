@@ -1,63 +1,95 @@
-# THUSCC26 HPL：从 baseline 学习优化
+# THUSCC26 HPL：配置与提交材料
 
-这是 [icl-utk-edu/hpl](https://github.com/icl-utk-edu/hpl) 的公开 fork，用于清华大学学生超算竞赛 HPL 题的个人学习、配置管理和实验复现。
+源码直接用[Netlib官方HPL 2.3发布包](https://www.netlib.org/benchmark/hpl/hpl-2.3.tar.gz)。不再重复存放整套源码、手册或多份教程；原始源码不允许修改。旧版本可从Git历史找到。
 
-**当前进度：已完成 baseline，尚未在本仓库开展优化实验。** 已有手动 baseline 为 **4072.2 GFlop/s、282.90 秒、PASSED**。新脚本已在本机验证语法、下载校验、实验副本准备和防覆盖保护，尚未在比赛集群编译或运行。仓库整理、GitHub 发布由助手完成；集群编译、提交和优化由学习者手动操作。
+只维护五个工作文件：
 
-## 先弄清原题与源码
+| 文件 | 用途 / 更新时机 |
+|---|---|
+| `HPL.dat` | 当前选定参数；候选通过并决定采用后更新 |
+| `Make.Linux_Intel` | 基线编译选项参考；交付用产生实际xhpl的构建文件 |
+| `run.sh` | Slurm运行脚本；改资源或运行环境时更新 |
+| `report.md` | 报告草稿及实验表；每次试跑后更新，定稿导出PDF |
+| `README.md` | 操作与提交清单；规则于2026-11-07核对 |
 
-- [比赛原题与规则](https://lab.cs.tsinghua.edu.cn/scc/Benchmarks/HPL/)：CPU 集群、最多 2 节点 / 112 核，残差通过后比较 GFlops。
-- [Netlib 官方主页](https://www.netlib.org/benchmark/hpl/)：明确链接到本 fork 的上游 GitHub 仓库。
-- **比赛实际编译的是官方 `hpl-2.3.tar.gz`**。GitHub 上游当前提交与该发布包有少量差异，不能直接假定当前 `main` 就是比赛原始发布版。获取脚本会下载发布包并核对固定 SHA-256；不会编译仓库根目录的源码。
-- HPL 源码不可修改；可调整编译器、编译选项、BLAS / MPI、`HPL.dat` 和运行配置。只用 `sbatch` 提交计算，登录节点用于编辑、编译和提交。
+原始程序、每次输入和日志保存在Git忽略的`.local/`，不放入公开仓库。仓库仍为官方上游的fork；本次精简当前工作树，没有改写历史。
 
-## 仓库导航
+## 30分钟安排
 
-```text
-README.md                       本说明：先读这里
-src/ include/ testing/ ...       保留的上游源码：理解算法、通信、计时
-README  COPYRIGHT  COPYING      上游原始说明与许可
-thuscc26/
-  configs/baseline/HPL.dat       N=120000、NB=384、P×Q=8×14
-  build/Make.Linux_Intel.in      Intel MPI + MKL sequential 编译模板
-  slurm/run.slurm                双节点112进程、每进程1线程的运行模板
-  scripts/01-fetch-source.sh     下载、校验、解压比赛发布包
-  scripts/02-build.sh            编译并核对原文件及动态库
-  scripts/03-prepare-run.sh      准备独立实验目录，不提交作业
-  docs/01-manual-workflow.md     做什么、为什么、命令、成功标准
-  docs/02-optimization-map.md    优化对象和比较方法
-  docs/03-code-map.md            读源码、配置、脚本时该看哪里
-  docs/04-experiment-template.md 每次实验的记录模板
-  results/BASELINE.md            已有结果与证据来源
-.work/                          下载、构建、运行和原始日志；本地生成，Git忽略
+复用已验证的xhpl，不重新编译。固定N120000、P8Q14、112进程×1线程，仅比较NB336/384/448。NB会影响矩阵乘法效率和面板/通信开销，不预先认定哪一个最好。
+
+| 操作窗口 | 任务 |
+|---|---|
+| 0–5分钟 | 查队列，确认已有baseline文件，准备NB336独立副本 |
+| 5–12分钟 | 运行NB336，核对PASSED并更新报告 |
+| 12–19分钟 | 资源/时间允许才试NB448，否则停止增加候选 |
+| 19–25分钟 | 可选：复测较好候选或当期NB384，检查波动 |
+| 25–30分钟 | 固定选定配置、更新报告、校验日志和整理交付材料 |
+
+已有baseline约5分钟/次。两次候选约10分钟；加一次复测共约15分钟计算、28 CPU核时，磁盘主要为少量日志。**排队不含在估算中，不能保证30分钟内获得资源。** 第5分钟仍无可用额度就以材料准备为主，保留已有有效baseline，不取消队友作业。
+
+## 手动准备一轮
+
+先登录集群、进入自己的仓库，将BASELINE设为已验证的原baseline目录；下面的路径占位符需要替换。示例只准备NB336。
+
+```bash
+squeue -u "$USER"
+BASELINE=/你的原baseline绝对路径
+trial="$PWD/.local/runs/nb336"
+mkdir -p .local/runs
+mkdir "$trial"
+mkdir "$trial/logs"
+cp "$BASELINE/xhpl" "$trial/xhpl"
+cp HPL.dat "$trial/HPL.dat"
+cp run.sh "$trial/run.sh"
+sed -i '8s/^384$/336/' "$trial/HPL.dat"
+diff -u HPL.dat "$trial/HPL.dat"
+bash -n "$trial/run.sh"
 ```
 
-**真正开始优化时，先改参数配置，保持源码不变。** 例如调整 `HPL.dat` 的 NB，研究分块大小对矩阵乘法效率和通信的影响；之后再研究进程网格、进程与线程、库和编译选项。没有“所有机器通用的最佳参数”。
+逐步执行，任一步报错先停下；已有实验目录应换名，不继续复制覆盖。原因：独立目录保存本次输入和程序，避免排队时修改文件影响结果。diff应只显示NB由384变336。确认后进入该目录，手动执行**一次**`sbatch run.sh`，记下作业号；不用`bash run.sh`在登录节点运行计算。
 
-## 怎样使用
+用squeue查当前、sacct查历史，读取该轮logs中的.out和.err。正常退出、参数正确、PASSED且1通过/0失败/0跳过后才比性能。固定N时GFlops越高越好；小幅差异未复测就写“待确认”，不宣称稳定提升。第二次试验另建目录。
 
-先读 [手动流程](thuscc26/docs/01-manual-workflow.md)，再逐步操作。下面是阶段索引，**不是需要一次性粘贴执行的命令串**：
+## 根据官方指南，要交什么
 
-| 阶段 | 手动使用的工具 | 为什么 |
-|---|---|---|
-| 获取源码 | `bash thuscc26/scripts/01-fetch-source.sh` | 固定比赛允许的发布版，避免源码版本混淆 |
-| 编译 | `bash thuscc26/scripts/02-build.sh` | 把原始 C 代码与 MPI / MKL 链接成 `xhpl` |
-| 准备一次实验 | `bash thuscc26/scripts/03-prepare-run.sh baseline-01 thuscc26/configs/baseline/HPL.dat` | 每次独立保存程序、输入和脚本，保护已有结果 |
-| 提交计算 | 在该实验目录中手动 `sbatch run.slurm` | 由 Slurm 申请计算节点并执行脚本 |
-| 查结果 | `squeue`、`sacct`、`cat logs/hpl_作业号.out` | 分清排队、正常退出、正确性和性能 |
+截止：**2026-11-22 23:59:59，北京时间**，提前完成上传。
 
-脚本没有自动提交、取消或监控作业的逻辑。`sbatch` 是计算提交；比赛计分提交是另一件事，已有成绩的计分回执尚未确认。
+**计分：一份原样、UTF-8、≤100 MiB的完整HPL输出。** 必须含Start/End、完整banner/参数表/结果表和PASSED，且只含一次运行的一个测试规模。不得裁剪、修改、拼接；sbatch成功不等于已计分。
 
-## 公开与本地文件
+在登录节点下载官方脚本，不修改它；实际日志路径替换后使用：
 
-公开保存：官方源码历史、可复用配置、脚本、学习说明、带来源的结果摘要。原始计分日志在本地完整保留，不编辑为“更好看的结果”；本仓库目前只公开摘要。
+```bash
+mkdir -p .local
+wget -O .local/submit.sh https://lab.cs.tsinghua.edu.cn/scc/assets/submit.sh
+chmod +x .local/submit.sh
+.local/submit.sh --dry HPL /实际路径/logs/hpl_JOBID.out
+# 与队长确认本队当前成绩，决定采用后才正式提交：
+.local/submit.sh HPL /实际路径/logs/hpl_JOBID.out
+```
 
-不放入仓库：SSH / VPN 配置、密钥、账号口令、队内聊天、内部 PDF、编译产物、下载缓存或队友文件。不要在这个仓库中存放上述内容。
+dry返回`Validation Passed (dry run)`只验证；正式成功以`Server Message: Submission Accepted; Performance: ...`为准。**同队同题最后一次成功的正式提交覆盖当前成绩，不自动保留最好成绩。** 提交账号为组委会发给队长的队伍编号，可能不同于SSH账号。凭证/回执留本地。
 
-## 上游与许可
+**最终：全队所有题目统一一个final.tar.gz，≤100 MiB，通过REPORT提交。** 你负责其中的HPL子目录：
 
-上游基点：`9edeab5e1713116c4231e5d3aa6159b5b747ede8`（2026-11-07 核对）。现有上游文件保留；本次新增内容集中在 `thuscc26/` 及本 README、Git 管理说明。
+```text
+final/HPL/
+  report.pdf          问题、方法、实验结果、加速比和结论
+  HPL.dat             与选定日志对应的参数
+  Make.Linux_Intel    产生该xhpl的实际编译配置
+  environment.txt     软件版本、运行环境及复现信息
+  run.sh              实际使用的脚本
+  hpl_JOBID.out       与选定计分结果一致的完整原始输出
+```
 
-This product includes software developed at the University of Tennessee, Knoxville, Innovative Computing Laboratory.
+编译/脚本改动在报告中说明。HPL清单未要求重复打包整套官方源码或预编译二进制；其他题目的源码/补丁按各自规定准备。不要拿未使用的参考Make文件代替实际构建配置。
 
-HPL 原有许可见 [COPYRIGHT](COPYRIGHT) / [COPYING](COPYING)，保留全部版权声明。
+将HPL子目录交队长，合并其他题后由队伍执行`tar -czf final.tar.gz final/`，再用官方脚本`--dry REPORT`校验、`REPORT`正式提交。只接受.tar.gz；GitHub推送、单独PDF、ZIP、.tgz和dry通过均不等于最终提交。REPORT的dry不代表内容已获审核。
+
+## 优化时同步维护
+
+每轮独立保留`.local/runs/实验名/`中的xhpl、HPL.dat、run.sh、environment.txt及完整日志；run.sh记录运行环境和哈希，实际编译配置/日志另从构建目录保存。
+
+助手根据你提供的输出同步更新report.md中的假设、参数、正确性、性能和结论；决定采用才更新根目录配置。选定后将报告导出report.pdf，从该轮原文件组装HPL交付目录，并记录HPL/REPORT两类回执。未运行或未收到回执的项目保持待确认。原始日志不因公开或写报告而改写。
+
+依据：[原题](https://lab.cs.tsinghua.edu.cn/scc/Benchmarks/HPL/) · [源码主页](https://www.netlib.org/benchmark/hpl/index.html) · [提交指南](https://lab.cs.tsinghua.edu.cn/scc/submit/)。最新通知优先。

@@ -21,3 +21,16 @@ testing/matgen/.deps/
 testing/pmatgen/.deps/
 testing/ptest/.deps/
 testing/ptimer/.deps/
+
+# THUSCC26 local work, binaries, raw outputs and private configuration.
+/.work/
+/.private/
+/.env
+/.env.*
+/.ssh/
+/thuscc26/**/logs/
+/thuscc26/**/xhpl
+/thuscc26/**/*.out
+/thuscc26/**/*.err
+/thuscc26/**/*.o
+/thuscc26/**/*.a
